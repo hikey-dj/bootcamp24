@@ -58,7 +58,7 @@ app.post("/signin", async (req, res) => {
 
 // POST endpoint to handle chat
 app.post("/chat", userMiddleware, async (req, res) => {
-  const { prompt } = req.body.prompt;
+  const prompt = req.body.prompt;
   try {
     const result = await model.generateContent(prompt);
     Chat.create({
@@ -69,7 +69,7 @@ app.post("/chat", userMiddleware, async (req, res) => {
     console.log(result.response.text());
     return res.json({ response: result.response.text() });
   } catch (error) {
-    return res.status(500).json({ response: "Something went wrong" });
+    return res.status(500).json({ response: prompt });
   }
 });
 
@@ -80,7 +80,7 @@ app.get("/stream", async (req, res) => {
 
 app.get("/history", userMiddleware, async (req, res) => {
   const chats = await Chat.find({ user: req.body.email });
-  res.json(chats);
+  res.json(chats.map((chat) => ({ query: chat.query, response: chat.response })));
 });
 
 // Start the server
