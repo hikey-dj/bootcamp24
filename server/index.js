@@ -2,28 +2,39 @@ require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
-//const OpenAI = require("openai");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const jwt = require("jsonwebtoken");
 const { user_structure } = require("./types");
 const { User, Chat } = require("./db");
 const bcrypt = require("bcrypt");
 const { userMiddleware } = require("./middlewares");
+const { GoogleAIFileManager } = require("@google/generative-ai/server");
+const multer = require("multer");
+
 const secret = process.env.SECRET;
+
+// Multer
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/') // Make sure this uploads directory exists
+  },
+  filename: function (req, file, cb) {
+    cb(null, file.fieldname + '-' + Date.now())
+  }
+});
+const upload = multer({ storage: storage });
+
+require("dotenv").config();
 
 // Initialize Express app
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// Initialize OpenAI
-// const openai = new OpenAI({
-//   organization: process.env.OPENAI_ORGANIZATION,
-//   apiKey: process.env.OPENAI_API_KEY
-// });
-
 // Initialize Google Generative AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY);
+
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 // Signup route
@@ -73,9 +84,55 @@ app.post("/chat", userMiddleware, async (req, res) => {
   }
 });
 
-// GET endpoint to handle chat
-app.get("/stream", async (req, res) => {
-  // TODO: Stream the response back to the client
+// POST endpoint to handle chat
+app.post("/stream", upload.single('file'), checkfile, async (req, res) => {
+
+  try {
+    let result;
+    let uploadResponse = null;
+    if (!req.file || req.file === "null") {
+      result = await model.generateContentStream([{ text: req.body.prompt }]);
+    } else {
+      uploadResponse = await fileManager.uploadFile(req.file.path, {
+        mimeType: req.fileType,
+        displayName: req.file.originalname,
+      });
+      result = await model.generateContentStream([
+        {
+          fileData: {
+            mimeType: uploadResponse.file.mimeType,
+            fileUri: uploadResponse.file.uri,
+          }
+        },
+        { text: req.body.prompt },
+      ]);
+    }
+
+    let i = 0;
+
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+
+    for await (const chunk of result.stream) {
+      const chunkText = chunk.text();
+      const jsonChunk = JSON.stringify({ chunk: chunkText }) + "\n"; // NDJSON format
+      res.write(jsonChunk);
+      console.log(`Chunk ${i}: ${chunkText}`);
+      i++;
+    }
+
+    res.end();
+
+    if (uploadResponse) {
+      // Delete the file.
+      await fileManager.deleteFile(uploadResponse.file.name);
+
+      console.log(`Deleted ${uploadResponse.file.displayName}`);
+    }
+  } catch (error) {
+    console.error("Failed to generate content stream:", error);
+    res.status(500).json({ response: "Something went wrong" });
+  }
+
 });
 
 app.get("/history", userMiddleware, async (req, res) => {
@@ -83,5 +140,57 @@ app.get("/history", userMiddleware, async (req, res) => {
   res.json(chats.map((chat) => ({ query: chat.query, response: chat.response })));
 });
 
+
+function checkfile(req, res, next) {
+  if (!req.file || req.file === "null") {
+    console.log('No file received');
+    next();
+    return;
+  }
+
+  const allowedFileTypes = [
+    'application/pdf',
+    'application/x-javascript',
+    'text/javascript',
+    'application/x-python',
+    'text/x-python',
+    'text/plain',
+    'text/html',
+    'text/css',
+    'text/md',
+    'text/csv',
+    'text/xml',
+    'text/rtf'
+  ];
+
+  const file = req.file;
+
+  const fileExtension = file.originalname ? file.originalname.split('.').pop() : null;
+
+  const fileType = fileExtension === 'pdf' ? 'application/pdf' :
+    fileExtension === 'js' ? 'application/x-javascript' :
+      fileExtension === 'py' ? 'application/x-python' :
+        fileExtension === 'txt' ? 'text/plain' :
+          fileExtension === 'html' ? 'text/html' :
+            fileExtension === 'css' ? 'text/css' :
+              fileExtension === 'md' ? 'text/md' :
+                fileExtension === 'csv' ? 'text/csv' :
+                  fileExtension === 'xml' ? 'text/xml' :
+                    fileExtension === 'rtf' ? 'text/rtf' :
+                      null;
+
+  if (fileType && allowedFileTypes.includes(fileType) && file.size < 5000000) {
+    req.fileType = fileType;
+    console.log('Valid file type or extension ', fileExtension);
+    next();
+  } else {
+    console.log('Invalid file type and extension ', fileType, file.size);
+    return res.status(400).json({ response: "Invalid file type or extension" });
+  }
+}
+
 // Start the server
-app.listen(3000);
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
