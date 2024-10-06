@@ -8,10 +8,26 @@ body {
 }
 
 .container {
-  max-width: calc(60% - 40px);
+  width: 100%;
+  max-width: calc(60vw - 40px);
   margin: 0 auto;
-  padding: 40px;
   text-align: center;
+}
+
+.chatBody {
+  max-width: 100vw;
+  display: flex;
+  flex-direction: column;
+  justify-content: left;
+  height: 100vh;
+  gap: 20px;
+}
+
+.header {
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 h1 {
@@ -117,7 +133,7 @@ h1 {
   box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
 }
 
-.record{
+.record {
   display: flex;
   align-items: center;
   padding: 10px;
@@ -132,7 +148,7 @@ h1 {
   box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
 }
 
-.attach{
+.attach {
   display: flex;
   align-items: center;
   padding: 10px;

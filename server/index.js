@@ -47,7 +47,10 @@ app.post("/signup", async (req, res) => {
   const { email, password } = req.body;
   const hashedPassword = await bcrypt.hash(password, 10);
   await User.create({ email: email, password: hashedPassword });
-  res.json({ message: "User created successfully" });
+  const token = jwt.sign({ email: email }, secret, {
+    expiresIn: "12h",
+  });  
+  res.json({ message: "User created successfully" , token});
 });
 
 // Signin route
@@ -72,11 +75,6 @@ app.post("/chat", userMiddleware, async (req, res) => {
   const prompt = req.body.prompt;
   try {
     const result = await model.generateContent(prompt);
-    Chat.create({
-      user: req.body.email,
-      query: prompt,
-      response: result.response.text(),
-    });
     console.log(result.response.text());
     return res.json({ response: result.response.text() });
   } catch (error) {
@@ -85,7 +83,7 @@ app.post("/chat", userMiddleware, async (req, res) => {
 });
 
 // POST endpoint to handle chat
-app.post("/stream", upload.single('file'), checkfile, async (req, res) => {
+app.post("/stream", userMiddleware, upload.single('file'), checkfile, async (req, res) => {
 
   try {
     let result;
@@ -112,15 +110,31 @@ app.post("/stream", upload.single('file'), checkfile, async (req, res) => {
 
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
+    response = "";
+
     for await (const chunk of result.stream) {
       const chunkText = chunk.text();
       const jsonChunk = JSON.stringify({ chunk: chunkText }) + "\n"; // NDJSON format
       res.write(jsonChunk);
-      console.log(`Chunk ${i}: ${chunkText}`);
+      response += chunkText;  
       i++;
     }
 
     res.end();
+
+    Chat.create({
+      user: req.email,
+      role: "user",
+      text: req.body.prompt,
+      fileName: req.file ? req.file.originalname : null,
+    });
+
+    Chat.create({
+      user: req.email,
+      role: "model",
+      text: response,
+      fileName: null
+    });    
 
     if (uploadResponse) {
       // Delete the file.
@@ -135,13 +149,14 @@ app.post("/stream", upload.single('file'), checkfile, async (req, res) => {
 
 });
 
-app.get("/history", userMiddleware, async (req, res) => {
-  const chats = await Chat.find({ user: req.body.email });
-  res.json(chats.map((chat) => ({ query: chat.query, response: chat.response })));
+app.post("/history", userMiddleware, async (req, res) => {
+  const chats = await Chat.find({ user: req.email });
+  res.json(chats.map((chat) => {return {role: chat.role, content: chat.text, fileName: chat.fileName}}));
 });
 
 
 function checkfile(req, res, next) {
+
   if (!req.file || req.file === "null") {
     console.log('No file received');
     next();

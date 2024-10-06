@@ -12,8 +12,9 @@ const userSchema = new mongoose.Schema({
 
 const chatSchema = new mongoose.Schema({
     user: String,
-    query: String,
-    response: String
+    role: String,
+    text: String,
+    fileName: String,
 });
 
 const User = mongoose.model('User', userSchema);
