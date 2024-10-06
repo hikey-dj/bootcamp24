@@ -10,19 +10,15 @@ const bcrypt = require("bcrypt");
 const { userMiddleware } = require("./middlewares");
 const { GoogleAIFileManager } = require("@google/generative-ai/server");
 const multer = require("multer");
+const storage = multer.memoryStorage();
 const path = require('path');
+const tmp = require('tmp'); // Import tmp library
+const fs = require('fs'); // Import fs module
 
 const secret = process.env.SECRET;
 
+
 // Multer
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/') // Make sure this uploads directory exists
-  },
-  filename: function (req, file, cb) {
-    cb(null, file.fieldname + '-' + Date.now())
-  }
-});
 const upload = multer({ storage: storage });
 
 require("dotenv").config();
@@ -91,19 +87,29 @@ app.post("/chat", userMiddleware, async (req, res) => {
   }
 });
 
-// POST endpoint to handle chat
 app.post("/stream", userMiddleware, upload.single('file'), checkfile, async (req, res) => {
-
   try {
     let result;
     let uploadResponse = null;
+
     if (!req.file || req.file === "null") {
       result = await model.generateContentStream([{ text: req.body.prompt }]);
     } else {
-      uploadResponse = await fileManager.uploadFile(req.file.path, {
-        mimeType: req.fileType,
+      // Create a temporary file
+      const tempFile = tmp.fileSync({ postfix: `.${req.file.originalname.split('.').pop()}` });
+
+      // Write the file buffer to the temporary file
+      fs.writeFileSync(tempFile.name, req.file.buffer);
+
+      // Upload the temporary file
+      uploadResponse = await fileManager.uploadFile(tempFile.name, {
+        mimeType: req.file.mimetype,
         displayName: req.file.originalname,
       });
+
+      // Remove the temporary file after uploading
+      fs.unlinkSync(tempFile.name);
+
       result = await model.generateContentStream([
         {
           fileData: {
