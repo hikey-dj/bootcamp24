@@ -23,7 +23,8 @@ function Chat() {
             navigate('/signin');
             return;
         }
-        fetch(`http://${backendUrl}/history`, {
+        console.log(backendUrl);
+        fetch(`${backendUrl}/history`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -63,7 +64,7 @@ function Chat() {
                 formData.append('file', null);
             }
 
-            const response = await fetch(`http://${backendUrl}/stream`, {
+            const response = await fetch(`${backendUrl}/stream`, {
                 method: 'POST',
                 body: formData,
                 headers: {

@@ -10,6 +10,7 @@ const bcrypt = require("bcrypt");
 const { userMiddleware } = require("./middlewares");
 const { GoogleAIFileManager } = require("@google/generative-ai/server");
 const multer = require("multer");
+const path = require('path');
 
 const secret = process.env.SECRET;
 
@@ -36,6 +37,14 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY);
 
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+// Client paths
+app.use(express.static(path.join(__dirname, '../client/build')));
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
+});
+
 
 // Signup route
 app.post("/signup", async (req, res) => {
